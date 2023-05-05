@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head> <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat GPT-3</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ETA with TomTom API</title>
+  <link rel="stylesheet" href="stylegpt.css">
+</head>
+<body>
+  <div>
+    <label for="origin">Origin:</label>
+    <br>
+    <input type="text" id="origin" placeholder="Enter origin">
+  </div>
+  <div>
+    <label for="destination">Destination:</label>
+    <br>
+    <input type="text" id="destination" placeholder="Enter destination">
+  </div>
+  <br>
+<div id="eta"></div>
+<div id="start-time"></div>
+<div id="error"></div>
+<div id="loading"></div>
+
+
+  
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+  
+ <script>
+    const apiKey = 'umpATVKRJOZycOzUfAgqdUE6Y0EV8ZGv';
+    const eventStartTime = new Date();
+
+    async function setUserLocation() {
+      const originInput = document.getElementById('origin');
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+
+          try {
+            const url = `https://api.tomtom.com/search/2/reverseGeocode/${lat},${lng}.json?key=${apiKey}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            const address = data.addresses[0].address.freeformAddress;
+            originInput.value = address;
+            updateETA();
+          } catch (error) {
+            console.error('Error fetching address:', error);
+          }
+        }, (error) => {
+          console.error('Error getting user location:', error);
+        });
+      } else {
+        console.error('Geolocation is not supported by this browser.');
+      }
+    }
+
+    async function getCoordinates(address) {
+      const url = `https://api.tomtom.com/search/2/search/${encodeURIComponent(address)}.json?key=${apiKey}`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        const results = data.results;
+        if (results.length > 0) {
+          const position = results[0].position;
+          return { lat: position.lat, lng: position.lon };
+        } else {
+          throw new Error('No results found');
+        }
+      } catch (error) {
+        console.error('Error fetching coordinates:', error);
+        throw new Error('Error fetching coordinates');
+      }
+    }
+
+    async function updateETA() {
+      const originInput = document.getElementById('origin');
+      const destinationInput = document.getElementById('destination');
+      const etaElement = document.getElementById('eta');
+      const errorElement = document.getElementById('error');
+      const loadingElement = document.getElementById('loading');
+      const messageElement = document.getElementById('message');
+      const addButton = document.getElementById('add-button');
+
+      // Clear any existing error messages
+      errorElement.textContent = '';
+
+      // Show loading indicator
+      loadingElement.textContent = 'Loading...';
+
+      try {
+        const origin = await getCoordinates(originInput.value);
+        const destination = await getCoordinates(destinationInput.value);
+
+        if (origin && destination) {
+          const eta = await getETA(origin, destination);
+          const formattedEta = eta.toLocaleString();
+          etaElement.textContent = `Estimated Time of Arrival: ${formattedEta}`;
+			 const startTimeElement = document.getElementById("start-time");
+    const formattedStartTime = eventStartTime.toLocaleString();
+    startTimeElement.textContent = `Event Start Time: ${formattedStartTime}`;
+
+          if (eta.getTime() > eventStartTime.getTime()) {
+            addButton.disabled = false;
+            messageElement.value = `sorry we are running a little behind our eta is : ${formattedEta}`;
+            const messageContainer = document.getElementById('message-container');
+            const etaMessage = document.createElement('div');
+            etaMessage.textContent = `ETA is later than event start time: ${formattedEta}`;
+            etaMessage.style.color = 'red';
+            messageContainer.insertBefore(etaMessage, messageElement);
+          } else {
+            addButton.disabled = true;
+            messageElement.placeholder = `ETA is before event start time`;
+          }
+        }
+      } catch (error) {
+        console.error('Error updating ETA:', error);
+        errorElement.textContent = 'Error updating ETA';
+      } finally {
+        // Hide loading indicator
+        loadingElement.textContent = '';
+      }
+    }
+
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+      input.addEventListener('input', updateETA);
+    });
+
+    async function getETA(origin, destination) {
+      const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin.lat},${origin.lng}:${destination.lat},${destination.lng}/json?key=${apiKey}&traffic=true`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        const travelTime = data.routes[0].summary.travelTimeInSeconds;
+        const eta = new Date(Date.now() + travelTime * 1000);
+        return eta;
+      } catch (error) {
+        console.error('Error fetching ETA:', error);
+        throw new Error('Error fetching ETA');
+      }
+    }
+
+    $(function() {
+      $("#destination").autocomplete({
+        source: function(request, response) {
+          $.ajax({
+            url: `https://api.tomtom.com/search/2/search/${encodeURIComponent(request.term)}.json?key=${apiKey}`,
+            method: "GET",
+            dataType: "json",
+            success: function(data) {
+              const results = data.results;
+              const addresses = results.map(result => result.address.freeformAddress);
+              response(addresses);
+            },
+            error: function(error) {
+              console.error("Error fetching autocomplete suggestions:", error);
+              response([]);
+            }
+          });
+        },
+      });
+      
+      $("#answerSelect").change(function() {
+        const selectedValue = $(this).val();
+        $("#destination").val(selectedValue);
+        updateETA();
+      });
+    });
+
+    setUserLocation();
+  </script>
+
+  
+	
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	<h1>TidyCal API Example</h1>
+  <button id="getBookings">Get Bookings</button>
+  <div>
+    <label for="answerInput">Answer:</label>
+    <input type="text" id="answerInput">
+    <select id="answerSelect" style="display: none;"></select>
+  </div>
+  <pre id="output"></pre>
+
+  <h1>Send SMS with Twilio and Create Google Calendar Event</h1>
+  <div style="display: none;">
+  <label for="account-sid">Account SID:</label>
+  <br>
+  <input type="text" id="account-sid" value="AC140bcb37bdc67dd8ccd719b0b5a05e45">
+</div>
+
+  <div style="display: none;">
+    <label for="auth-token">Auth Token:</label>
+    <br>
+    <input type="text" id="auth-token" value="8cb116390af860cd9533c1098339044">
+  </div>
+  <div style="display: none;">
+    <label for="from-number" >From Number:</label>
+    <br>
+    <input type="text" id="from-number" value="+441253531171">
+  </div>
+  <div>
+    <label for="to-number">To Number:</label>
+    <br>
+    <input type="text" id="to-number" value="Enter the recipient's phone number">
+  </div>
+  <div>
+    <label for="booking-start-time">Booking Start Time:</label>
+    <br>
+    <input type="datetime-local" id="booking-start-time">
+  </div>
+  <div id="message-container">
+    <textarea id="message" placeholder="Enter your message"></textarea>
+    <button id="add-button" disabled>Add to message</button>
+  </div>
+
+  <br>
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+  <script>
+    const accessToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiMjEwMmY1Y2FmOGU0NjQ5ZjFlMDEzYmQzMWQxNWIyYzE1MGYyZDUxZTlkMTg2NWZjMGEyMjU1MjhmNzFkZjM4NGQ2NTA2MDM3ODUwMGIzNTciLCJpYXQiOjE2ODMxMDQ4NDQuNTk4NywibmJmIjoxNjgzMTA0ODQ0LjU5ODcwNCwiZXhwIjo0ODM4Nzc4NDQ0LjU5MDA3LCJzdWIiOiI2MTc5OSIsInNjb3BlcyI6W119.piR6iyeeYmRfq9POt5VcZpWbzsLPCepZcSX7a6H8AkBHQAnA0jVV-L8OWTIIizcWT0kJXAjiWSv9QJSfdPVHwH8JKN4kv29PrS96nIrFEUrTsfNOV5kkLdsoApZsRoOuTvzjvgemI__3fKawFh-Nq6Ill6vxgxHCYhlKPFiq7g1rJUmW2luUrmD-uuo_CCqOiJHiIR5bPFAmG4mWp3aYr5kPV5Qvxe0qtY0nqr3qSnoVcV-C_asm5ijKIsFmar-m5MTbZXVbQGGMsQXuxHZvo8bUD10CPtuS8_DER8v5Rnb-S4ElWh3SyTJ94PnJdavjqqZA2qftHRR-h5r7XGWzGZCh3BGR3PtzkKADXS9q73_X2jfU2jBmED91t_Ws51mzemDGilBh2Zk1CUikCKy2CHkknHUfoY95elW54yWpl0G44V3xz07G_Ti1HtiohGfZjg-GgxZBoCPfJ1JpYL3Lx5QymJ4HzhGLAxI-AUywIi6bMjnezINk-P110REVeuipD__fGBlr0jqQMsxWvF3VPJIGww9bd5g_C8dv5LLN_RaIQuGNHHGbZC7TM2Xtm9AyRzdh2iwIOgnTheq-KxWQvj7KRSZU23_hZ-9y7iGFU6kXAuIrG_PYZ5CgD_40Jfg9tNrjstZSeupesL_RVwIrOg8pzmybIZBk2xgKHbJ6IXI";
+    const baseUrl = "https://tidycal.com/api";
+    const outputElement = document.getElementById("output");
+    const getBookingsButton = document.getElementById("getBookings");
+    const answerInput = document.getElementById("answerInput");
+    const answerSelect = document.getElementById("answerSelect");
+
+    getBookingsButton.addEventListener("click", async () => {
+      try {
+        const now = new Date();
+        const after = now.toISOString();
+        const before = new Date(now.getTime() + 300 * 60 * 1000).toISOString();
+
+        const response = await fetch(`${baseUrl}/bookings?after=${after}&before=${before}`, {
+          method: "GET",
+          headers: {
+            "Authorization": "Bearer " + accessToken,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const bookings = data.data;
+
+          if (bookings.length > 0) {
+            const filteredBookings = bookings
+              .filter(booking => booking.starts_at >= after && booking.starts_at < before)
+              .map(booking => ({
+                id: booking.id,
+                booking_id: booking.booking_id,
+                starts_at: booking.starts_at,
+                description: booking.description,
+                name: booking.contact ? booking.contact.name : null,
+                phone: booking.contact ? booking.contact.phone : null,
+                questions: booking.questions ? booking.questions.map(q => ({
+                  id: q.id,
+                  booking_id: q.booking_id,
+                  question: q.question,
+                  answer: q.answer
+                })) : null
+              }));
+
+            outputElement.textContent = JSON.stringify(filteredBookings, null, 2);
+
+            if (filteredBookings.length > 0) {
+              const answers = filteredBookings[0].questions;
+              if (answers && answers.length > 1) {
+                answerInput.style.display = "none";
+                answerSelect.style.display = "block";
+                answerSelect.innerHTML = "";
+                answers.forEach(answer => {
+                  const option = document.createElement("option");
+                  option.value = answer.answer;
+                  option.textContent = answer.answer;
+                  answerSelect.appendChild(option);
+                });
+              } else {
+                answerInput.style.display = "block";
+                answerSelect.style.display = "none";
+              }
+
+              // Set the booking start time to the selected booking start time
+              const bookingStartTime = new Date(filteredBookings[0].starts_at);
+              document.getElementById("booking-start-time").value = bookingStartTime.toISOString().slice(0, -8);
+            }
+          } else {
+            outputElement.textContent = "No bookings found.";
+          }
+        } else {
+          throw new Error(`HTTP Error: ${response.status}`);
+        }
+
+      } catch (error) {
+        console.error("Error:", error);
+        outputElement.textContent = "Error: " + error.message;
+      }
+    });
+
+    answerInput.addEventListener("input", (event) => {
+      const answer = event.target.value;
+      console.log("Answer:", answer);
+    });
+
+    answerSelect.addEventListener("change", (event) => {
+      const answer = event.target.value;
+      console.log("Answer:", answer);
+
+      // Extract the phone number from the selected answer
+      const phoneNumber = answer.match(/\+?\d{9,15}/g);
+
+      if (phoneNumber) {
+        // Fill the "To Number" input field with the extracted phone number
+        document.getElementById("to-number").value = phoneNumber[0];
+      } else {
+        document.getElementById("to-number").value = "";
+      }
+    });
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+	  
+
+    function sendSMS() {
+      const to = $('#to-number').val();
+      const message = $('#message').val();
+      const accountSid = $('#account-sid').val();
+      const authToken = $('#auth-token').val();
+
+      // Get the selected booking start time
+      const bookingStartTime = new Date($('#booking-start-time').val());
+
+      // Set the event start time to the selected booking start time
+      const eventStartTime = bookingStartTime;
+
+      // Set the event end time to 1 hour after the event start time
+      const eventEndTime = new Date(eventStartTime.getTime() + 60 * 60 * 1000);
+
+      // Format the event start and end times as ISO strings
+      const eventStartTimeIso = eventStartTime.toISOString();
+      const eventEndTimeIso = eventEndTime.toISOString();
+
+      // Create the event object
+      const event = {
+        summary: message,
+        start: {
+          dateTime: eventStartTimeIso,
+          timeZone: 'UTC'
+        },
+        end: {
+          dateTime: eventEndTimeIso,
+          timeZone: 'UTC'
+        }
+      };
+
+      // Send the SMS message
+      $.ajax({
+        url: `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        type: 'POST',
+        data: {
+          'From': '+441253531171',
+          'To': to,
+          'Body': message
+        },
+        headers: {
+          'Authorization': 'Basic ' + btoa(`${accountSid}:${authToken}`)
+        },
+        success: function(response) {
+          console.log('SMS sent successfully!');
+
+          // Create the Google Calendar event after the SMS message is sent successfully
+          gapi.client.calendar.events.insert({
+            'calendarId': 'primary',
+            'resource': event
+          }).then(function(response) {
+            console.log('Event created: ' + response.htmlLink);
+          }, function(error) {
+            console.error('Error creating event:', error);
+          });
+        },
+        error: function(error) {
+          console.error(error);
+        }
+      });
+    }
+
+    const sendSMSButton = document.getElementById('send-sms');
+    sendSMSButton.addEventListener('click', sendSMS);
+  </script>
+
+  <button onclick="sendSMS()">Send SMS</button>
+</body>
+</html>
